@@ -1,6 +1,6 @@
 {
-  "name": "vs-devio-opener",
-  "displayName": "vs-devio-opener",
+  "name": "variable-name-modification",
+  "displayName": "variable-name-modification",
   "description": "",
   "version": "0.0.1",
   "engines": {
@@ -14,8 +14,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "vs-devio-opener.helloWorld",
-        "title": "Hello World"
+        "command": "variable-name-modification.getSuggestion",
+        "title": "good suggestion please"
       }
     ]
   },
