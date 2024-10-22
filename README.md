@@ -1,3 +1,3 @@
-# vs-devio-opener README
+# name-modification README
 
-指定したDevelopersIOのページを開ける拡張機能です。
+コードを読み取り、変数名や関数名の修正提案・実際の修正ができる拡張機能です。
