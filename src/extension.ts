@@ -13,7 +13,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (editor) {
                 const document = editor.document;
                 const content = document.getText();
-
+                
                 vscode.window.withProgress({
                     location: vscode.ProgressLocation.Notification,
                     title: "コード分析中...",
@@ -21,7 +21,7 @@ export function activate(context: vscode.ExtensionContext) {
                 }, async (progress) => {
                     try {
                         const genAI = new GoogleGenerativeAI(API_KEY);
-                        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
                         
                         const prompt = `以下のコードを分析し、以下の情報を純粋なJSON形式で返してください。Markdown構文や説明文は含めないでください：
 1. 修正すべき変数名や関数名の「行」、「名前」、「修正後の名前」
@@ -30,9 +30,7 @@ export function activate(context: vscode.ExtensionContext) {
 修正や削除すべき部分がない場合は、それぞれ空の配列を返してください。
 
 ===コード開始===
-
-${content}
-
+${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
 ===コード終了===
 
 返答例：
@@ -53,7 +51,7 @@ ${content}
 
                         const result = await model.generateContent(prompt);
                         const resultText = result.response.text();
-
+                        
                         let modifications: Modification[] = [];
                         let deletions: Deletion[] = [];
                         try {
@@ -75,18 +73,7 @@ ${content}
                             return;
                         }
 
-                        displayModifications(modifications, deletions);
-
-                        // 修正を適用するかどうかを確認するボタンを表示
-                        const applyChanges = await vscode.window.showInformationMessage(
-                            `${modifications.length}個の修正と${deletions.length}個の削除が提案されました。修正を適用しますか？`,
-                            "はい", "いいえ"
-                        );
-
-                        if (applyChanges === "はい") {
-                            // 修正を適用する関数を呼び出す
-                            await applyModifications(document, modifications, deletions);
-                        }
+                        await action(document, modifications, deletions);
 
                     } catch (error) {
                         vscode.window.showErrorMessage(`エラーが発生しました: ${error}`);
@@ -102,43 +89,90 @@ ${content}
     context.subscriptions.push(disposable);
 }
 
-/* 修正の提案を表示する関数 */
-function displayModifications(modifications: Modification[], deletions: Deletion[]) {
-    console.log('modificationsは', modifications);
-    console.log('deletionsは', deletions);
-}
+async function action(document: vscode.TextDocument, modifications: Modification[], deletions: Deletion[]) {
+    let suggestText = "# 修正内容\n\n";
+    if (modifications.length !== 0) {
+        suggestText += "## 変更\n";
 
-/* 実際に修正する関数 */
-async function applyModifications(document: vscode.TextDocument, modifications: Modification[], deletions: Deletion[]) {
+        // modificationの追加処理
+        for (const modObj of modifications) {
+            const modificationText = `${modObj.line}行目 | 変更前の名前: ${modObj.oldName} | 変更後の名前: ${modObj.newName}\n`;
+            suggestText += modificationText;
+        }
+
+        if (deletions.length !== 0) {
+            // deletionの追加処理
+            suggestText += '\n## 削除\n';
+            for (const delObj of deletions) {
+                const deletionText = `${delObj.line}行目 | 名前: ${delObj.name}\n`;
+                suggestText += deletionText;
+            }
+        }
+    } else if (deletions.length !== 0) {
+        suggestText += "## 削除\n";
+
+        // deletionの追加処理
+        for (const delObj of deletions) {
+            const deletionText = `${delObj.line}行目 | 名前: ${delObj.name}\n`;
+            suggestText += deletionText;
+        }
+    }
+
     const edit = new vscode.WorkspaceEdit();
-    const newFileUri = vscode.Uri.file(document.uri.fsPath + '.modified.ts');
+    const newFileUri = vscode.Uri.file(document.uri.fsPath + '.suggestion.md');
 
-    // 元のファイルの内容をコピー
     edit.createFile(newFileUri, { overwrite: true });
-    edit.insert(newFileUri, new vscode.Position(0, 0), document.getText());
-
-    // 変数名を置換
-    for (const mod of modifications) {
-        const range = document.lineAt(mod.line - 1).range;
-        const lineText = document.lineAt(mod.line - 1).text;
-        const newLineText = lineText.replace(new RegExp(mod.oldName, 'g'), mod.newName);
-        edit.replace(newFileUri, range, newLineText);
-    }
-
-    // 変数を削除
-    for (const del of deletions.sort((a, b) => b.line - a.line)) { // 行番号の降順でソート
-        const range = document.lineAt(del.line - 1).range;
-        const lineText = document.lineAt(del.line - 1).text;
-        const newLineText = lineText.replace(new RegExp(`\\b${del.name}\\b`, 'g'), '');
-        edit.replace(newFileUri, range, newLineText);
-    }
+    edit.insert(newFileUri, new vscode.Position(0, 0), suggestText);
 
     await vscode.workspace.applyEdit(edit);
     const newDocument = await vscode.workspace.openTextDocument(newFileUri);
     await vscode.window.showTextDocument(newDocument);
-    vscode.window.showInformationMessage("修正が適用された新しいファイルが作成されました。");
+    const answer = await vscode.window.showInformationMessage(
+        "修正内容を記述したファイルを作成しました。修正を適用したファイルを作成しますか？",
+        "はい", "いいえ"
+    );
+
+    // if (answer === "はい") {
+    //     try {
+    //         await applyModifications(document, modifications, deletions);
+    //     } catch (e) {
+    //         vscode.window.showErrorMessage(`applyModificationsでエラー発生: ${e}`);
+    //         console.error('applyModificationsでエラー発生: ', e);
+    //     }
+    // }
 }
 
-export function deactivate() {
-    console.log("extensionがdeactivateされました");
-}
+// /* 実際に修正する関数 */
+// async function applyModifications(document: vscode.TextDocument, modifications: Modification[], deletions: Deletion[]) {
+//     const edit = new vscode.WorkspaceEdit();
+//     const newFileUri = vscode.Uri.file(document.uri.fsPath + '.modified.ts');
+
+//     // 元のファイルの内容をコピー
+//     edit.createFile(newFileUri, { overwrite: true });
+//     edit.insert(newFileUri, new vscode.Position(0, 0), document.getText());
+
+//     // 変数名を置換
+//     for (const mod of modifications) {
+//         const range = document.lineAt(mod.line - 1).range;
+//         const lineText = document.lineAt(mod.line - 1).text;
+//         const newLineText = lineText.replace(new RegExp(mod.oldName, 'g'), mod.newName);
+//         edit.replace(newFileUri, range, newLineText);
+//     }
+
+//     // 変数を削除
+//     for (const del of deletions.sort((a, b) => b.line - a.line)) { // 行番号の降順でソート
+//         const range = document.lineAt(del.line - 1).range;
+//         const lineText = document.lineAt(del.line - 1).text;
+//         const newLineText = lineText.replace(new RegExp(`\\b${del.name}\\b`, 'g'), '');
+//         edit.replace(newFileUri, range, newLineText);
+//     }
+
+//     await vscode.workspace.applyEdit(edit);
+//     const newDocument = await vscode.workspace.openTextDocument(newFileUri);
+//     await vscode.window.showTextDocument(newDocument);
+//     vscode.window.showInformationMessage("修正が適用された新しいファイルが作成されました。");
+// }
+
+// export function deactivate() {
+//     console.log("extensionがdeactivateされました");
+// }
