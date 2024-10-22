@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { Modification, Deletion } from "./interface";
 
 export default async function createSuggestionFile(document: vscode.TextDocument, modifications: Modification[], deletions: Deletion[]) {
-    let suggestText = "# 修正内容\n\n";
+    let suggestText = "# 提案内容\n\n";
     if (modifications.length !== 0) {
         suggestText += "## 変更\n";
 
