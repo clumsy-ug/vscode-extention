@@ -1,6 +1,6 @@
 {
-  "name": "variable-name-modification",
-  "displayName": "variable-name-modification",
+  "name": "name-modification",
+  "displayName": "name-modification",
   "description": "",
   "version": "0.0.1",
   "engines": {
@@ -14,7 +14,7 @@
   "contributes": {
     "commands": [
       {
-        "command": "variable-name-modification.getSuggestion",
+        "command": "name-modification.getSuggestion",
         "title": "good suggestion please"
       }
     ]
