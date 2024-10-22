@@ -20,7 +20,7 @@ export default async function createSuggestionFile(document: vscode.TextDocument
                 suggestText += deletionText;
             }
         }
-    } else if (deletions.length !== 0) {
+    } else {
         suggestText += "## 削除\n";
 
         // deletionの追加処理
