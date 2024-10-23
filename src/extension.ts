@@ -31,7 +31,10 @@ export function activate(context: vscode.ExtensionContext) {
 1. 修正すべき変数名や関数名の「行」、「名前」、「修正後の名前」
 2. 削除すべき変数名や関数名の「行」と「名前」
 
-同じ名前が複数個所で使われている場合はそれらすべて返すようにしてください。また、修正や削除すべき部分がない場合は、それぞれ空の配列を返してください。
+※重要事項
+1. 修正・削除すべき変数名・関数名が複数個所で使われている場合、その中で1番最初に出現する部分のみを返してください。すべて返す必要はありません。
+2. //で始まるコメントや/*で始まり*/で終わるコメントの部分は考慮しないでください。
+3. 修正・削除すべき部分がない場合は、修正と削除それぞれ空の配列を返してください。
 
 ===コード開始===
 ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
@@ -52,8 +55,6 @@ ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
                         if (prompt.length > 100000) {
                             vscode.window.showWarningMessage("ファイルが大きすぎるため、一部のみ分析します。");
                         }
-
-                        console.log('ああ', content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n'));
 
                         const result = await model.generateContent(prompt);
                         const resultText = result.response.text();
@@ -117,48 +118,57 @@ ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
 }
 
 async function applyModifications(document: vscode.TextDocument, content: string, modifications: Modification[], deletions: Deletion[]) {
-    let newContent = content;
+    let arrContent = content.split('\n');
+
+    // if (modifications.length > 0) {
+    //     function escapeRegExp(str: string) {
+    //         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    //     }
+
+    //     for (const mod of modifications) {
+    //         const regex = new RegExp(`(^|[^a-zA-Z0-9])(${escapeRegExp(mod.oldName)})(?=[^a-zA-Z0-9]|$)`, 'g');
+    //         arrContent[mod.line - 1] = arrContent[mod.line - 1].replace(regex, `$1${mod.newName}`);
+    //     }
+    // }
 
     if (modifications.length !== 0) {
+        let newContent = content;
         for (const mod of modifications) {
             const modOldName = mod.oldName;
             const modNewName = mod.newName;
 
-            // https://developer.mozilla.org/ja/docs/Web/JavaScript/Guide/Regular_expressions
             function escapeRegExp(str: string) {
                 return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             }
+            // \\bにしてるのになぜかtext.〇〇などのドットだとしてもちゃんとtextの部分に変更が反映されてるのが謎
             const regex = new RegExp(`\\b${escapeRegExp(modOldName)}\\b`, 'g');
             newContent = newContent.replace(regex, modNewName);
+            arrContent = newContent.split('\n');
         }
     }
 
-    if (deletions.length !== 0) {
-        const deleteTexts = [];
+    if (deletions.length > 0) {
+        // 降順にすれば、削除ごとに元のコードが1行減るという問題を気にしないでよくなる
+        deletions.sort((a, b) => b.line - a.line);
+        let delLines = [];
+        
         for (const del of deletions) {
-            const delLine  = del.line;
-            /* 一旦元のコード(文字列)を\nで区切った配列にするか
-            で、その配列のindexがdelLine - 1 である要素が消したい行のテキストになる(それを変数として保持する)
-            最後に、\nとtextの部分を削除する、でOK
-            ちなみに、一旦forを抜けないと削除行が1行ずつずれてしまうのでfor外でも処理を書く
-            */
-            const arrContent = newContent.split('\n');
-            const deleteLineText = arrContent[delLine - 1];
-            console.log('いい', deleteLineText);
-            deleteTexts.push(deleteLineText);
+            delLines.push(del.line);
         }
-        for (const deleteText of deleteTexts) {
-            const regex = new RegExp(`\\n${deleteText}`, 'g');
-            newContent = newContent.replace(regex, '');
+
+        for (const delLine of delLines) {
+            arrContent.splice(delLine - 1, 1);
         }
     }
+
+    const newContent = arrContent.join('\n');
 
     /* 削除テスト用 */
-    // let num1 = 32;
-    // const num2 = 32;
-    // let fire = 'fire';
-    // fire = 'world';
-    // num1++;
+    let num1 = 32;
+    const num2 = 32;
+    let fire = 'fire';
+    fire = 'world';
+    num1++;
 
     // 新しくファイルを作成し、そのファイルの内容をnewTextにした上で表示すれば完成
     const edit = new vscode.WorkspaceEdit();
