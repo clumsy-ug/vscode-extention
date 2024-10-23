@@ -1,3 +1,5 @@
+// 削除は、毎回行が変わっちゃう？からかわからんけど最後の1行だけ消せてなかったりする
+
 import * as vscode from "vscode";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { API_KEY } from "./env";
@@ -53,8 +55,6 @@ ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
                             vscode.window.showWarningMessage("ファイルが大きすぎるため、一部のみ分析します。");
                         }
 
-                        console.log('ああ', content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n'));
-
                         const result = await model.generateContent(prompt);
                         const resultText = result.response.text();
                         
@@ -93,14 +93,14 @@ ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
 
                 // 提案を受け入れるか聞く
                 const answer = await vscode.window.showInformationMessage(
-                    "修正内容を記述したファイルを作成しました。修正を適用したファイルを作成しますか？",
+                    "提案内容のファイルを作成しました。提案を適用したファイルを作成しますか？",
                     "はい", "いいえ"
                 );
 
                 // 提案を受け入れた場合、実際に修正内容を適用したファイルを作成する
                 if (answer === "はい") {
                     try {
-                        await applyModifications(document, modifications, deletions);
+                        await applyModifications(document, content, modifications, deletions);
                     } catch (e) {
                         vscode.window.showErrorMessage('エラー発生');
                         console.error('applyModificationsでエラー発生: ', e);
@@ -116,34 +116,52 @@ ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
     context.subscriptions.push(disposable);
 }
 
-async function applyModifications(document: vscode.TextDocument, modifications: Modification[], deletions: Deletion[]) {
+async function applyModifications(document: vscode.TextDocument, content: string, modifications: Modification[], deletions: Deletion[]) {
+    let newContent = content;
+
+    if (modifications.length !== 0) {
+        for (const mod of modifications) {
+            const modOldName = mod.oldName;
+            const modNewName = mod.newName;
+
+            // https://developer.mozilla.org/ja/docs/Web/JavaScript/Guide/Regular_expressions
+            function escapeRegExp(str: string) {
+                return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+            const regex = new RegExp(`\\b${escapeRegExp(modOldName)}\\b`, 'g');
+            newContent = newContent.replace(regex, modNewName);
+        }
+
+        if (deletions.length !== 0) {
+            for (const del of deletions) {
+                const delLine  = del.line;
+                /* 一旦元のコード(文字列)を\nで区切った配列にするか
+                で、その配列のindexがdelLine - 1 である要素が消したい行のテキストになる(それを変数として保持する)
+                最後に、\nとtextの部分を削除する、でOK */
+                const arrContent = newContent.split('\n');
+                const deleteLineText = arrContent[delLine - 1];
+                newContent = newContent.replace(new RegExp(`\\n${deleteLineText}`, 'g'), '');
+            }
+        }
+    } else {
+        for (const del of deletions) {
+            const delLine = del.line;
+            const arrContent = newContent.split('\n');
+            const deleteLineText = arrContent[delLine - 1];
+            newContent = newContent.replace(new RegExp(`\\n${deleteLineText}`, 'g'), '');
+        }
+    }
+
+    // 新しくファイルを作成し、そのファイルの内容をnewTextにした上で表示すれば完成
     const edit = new vscode.WorkspaceEdit();
     const newFileUri = vscode.Uri.file(document.uri.fsPath + '.modified.ts');
 
-    // 元のファイルの内容をコピー
     edit.createFile(newFileUri, { overwrite: true });
-    edit.insert(newFileUri, new vscode.Position(0, 0), document.getText());
-
-    // 変数名を置換
-    for (const mod of modifications) {
-        const range = document.lineAt(mod.line - 1).range;
-        const lineText = document.lineAt(mod.line - 1).text;
-        const newLineText = lineText.replace(new RegExp(mod.oldName, 'g'), mod.newName);
-        edit.replace(newFileUri, range, newLineText);
-    }
-
-    // 変数を削除
-    for (const del of deletions.sort((a, b) => b.line - a.line)) { // 行番号の降順でソート
-        const range = document.lineAt(del.line - 1).range;
-        const lineText = document.lineAt(del.line - 1).text;
-        const newLineText = lineText.replace(new RegExp(`\\b${del.name}\\b`, 'g'), '');
-        edit.replace(newFileUri, range, newLineText);
-    }
+    edit.insert(newFileUri, new vscode.Position(0, 0), newContent);
 
     await vscode.workspace.applyEdit(edit);
     const newDocument = await vscode.workspace.openTextDocument(newFileUri);
     await vscode.window.showTextDocument(newDocument);
-    vscode.window.showInformationMessage("修正が適用された新しいファイルが作成されました。");
 }
 
 export function deactivate() {
