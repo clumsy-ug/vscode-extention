@@ -1,5 +1,3 @@
-// 削除は、毎回行が変わっちゃう？からかわからんけど最後の1行だけ消せてなかったりする
-
 import * as vscode from "vscode";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { API_KEY } from "./env";
@@ -33,7 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
 1. 修正すべき変数名や関数名の「行」、「名前」、「修正後の名前」
 2. 削除すべき変数名や関数名の「行」と「名前」
 
-修正や削除すべき部分がない場合は、それぞれ空の配列を返してください。
+同じ名前が複数個所で使われている場合はそれらすべて返すようにしてください。また、修正や削除すべき部分がない場合は、それぞれ空の配列を返してください。
 
 ===コード開始===
 ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
@@ -54,6 +52,8 @@ ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
                         if (prompt.length > 100000) {
                             vscode.window.showWarningMessage("ファイルが大きすぎるため、一部のみ分析します。");
                         }
+
+                        console.log('ああ', content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n'));
 
                         const result = await model.generateContent(prompt);
                         const resultText = result.response.text();
@@ -131,26 +131,34 @@ async function applyModifications(document: vscode.TextDocument, content: string
             const regex = new RegExp(`\\b${escapeRegExp(modOldName)}\\b`, 'g');
             newContent = newContent.replace(regex, modNewName);
         }
+    }
 
-        if (deletions.length !== 0) {
-            for (const del of deletions) {
-                const delLine  = del.line;
-                /* 一旦元のコード(文字列)を\nで区切った配列にするか
-                で、その配列のindexがdelLine - 1 である要素が消したい行のテキストになる(それを変数として保持する)
-                最後に、\nとtextの部分を削除する、でOK */
-                const arrContent = newContent.split('\n');
-                const deleteLineText = arrContent[delLine - 1];
-                newContent = newContent.replace(new RegExp(`\\n${deleteLineText}`, 'g'), '');
-            }
-        }
-    } else {
+    if (deletions.length !== 0) {
+        const deleteTexts = [];
         for (const del of deletions) {
-            const delLine = del.line;
+            const delLine  = del.line;
+            /* 一旦元のコード(文字列)を\nで区切った配列にするか
+            で、その配列のindexがdelLine - 1 である要素が消したい行のテキストになる(それを変数として保持する)
+            最後に、\nとtextの部分を削除する、でOK
+            ちなみに、一旦forを抜けないと削除行が1行ずつずれてしまうのでfor外でも処理を書く
+            */
             const arrContent = newContent.split('\n');
             const deleteLineText = arrContent[delLine - 1];
-            newContent = newContent.replace(new RegExp(`\\n${deleteLineText}`, 'g'), '');
+            console.log('いい', deleteLineText);
+            deleteTexts.push(deleteLineText);
+        }
+        for (const deleteText of deleteTexts) {
+            const regex = new RegExp(`\\n${deleteText}`, 'g');
+            newContent = newContent.replace(regex, '');
         }
     }
+
+    /* 削除テスト用 */
+    // let num1 = 32;
+    // const num2 = 32;
+    // let fire = 'fire';
+    // fire = 'world';
+    // num1++;
 
     // 新しくファイルを作成し、そのファイルの内容をnewTextにした上で表示すれば完成
     const edit = new vscode.WorkspaceEdit();
