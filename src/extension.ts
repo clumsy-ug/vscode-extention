@@ -120,17 +120,6 @@ ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
 async function applyModifications(document: vscode.TextDocument, content: string, modifications: Modification[], deletions: Deletion[]) {
     let arrContent = content.split('\n');
 
-    // if (modifications.length > 0) {
-    //     function escapeRegExp(str: string) {
-    //         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    //     }
-
-    //     for (const mod of modifications) {
-    //         const regex = new RegExp(`(^|[^a-zA-Z0-9])(${escapeRegExp(mod.oldName)})(?=[^a-zA-Z0-9]|$)`, 'g');
-    //         arrContent[mod.line - 1] = arrContent[mod.line - 1].replace(regex, `$1${mod.newName}`);
-    //     }
-    // }
-
     if (modifications.length !== 0) {
         let newContent = content;
         for (const mod of modifications) {
