@@ -37,13 +37,6 @@ export default async function applyModifications(document: vscode.TextDocument, 
 
     const newContent = arrContent.join('\n');
 
-    /* 削除テスト用 */
-    let num1 = 32;
-    const num2 = 32;
-    let fire = 'fire';
-    fire = 'world';
-    num1++;
-
     // 新しくファイルを作成し、そのファイルの内容をnewTextにした上で表示すれば完成
     const edit = new vscode.WorkspaceEdit();
     const newFileUri = vscode.Uri.file(document.uri.fsPath + '.modified.ts');

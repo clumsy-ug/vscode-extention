@@ -115,5 +115,12 @@ ${content.split('\n').map((line, index) => `${index + 1}: ${line}`).join('\n')}
         }
     );
 
+    /* 削除テスト用 */
+    let num1 = 32;
+    const num2 = 32;
+    let fire = 'fire';
+    fire = 'world';
+    num1++;
+
     context.subscriptions.push(disposable);
 }
